@@ -121,7 +121,6 @@ h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0}
 .vocab .ex{grid-column:2;color:var(--muted);font-size:15px;font-style:italic}
 .say-btn{border:1.5px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .say-btn svg{width:16px;height:16px}
-.ex{margin:0}
 .exercise{padding:16px 0;border-top:1px solid var(--line)}
 .exercise:first-of-type{border-top:0;padding-top:4px}
 .ex-q{font-weight:700;margin:0 0 10px}
@@ -180,20 +179,16 @@ input[type=text]:focus,textarea:focus{border-color:var(--accent);outline:none}
 .msg.tutor .bubble{background:var(--soft);border-bottom-left-radius:4px}
 .msg.me .bubble{background:var(--accent);color:var(--on-accent);border-bottom-right-radius:4px}
 .fix{font-size:14px;padding:8px 12px;border-radius:10px;border:1px dashed var(--mid);color:var(--ink);background:color-mix(in srgb,var(--mid) 8%,var(--surface))}
-.msg-tools{display:flex;gap:6px}
+.msg-tools{display:flex;gap:6px;margin-top:2px}
 .msg-tools button{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 4px;text-decoration:underline}
 .composer{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);align-items:flex-end}
 .composer textarea{min-height:46px;height:46px;resize:none;flex:1}
 .mic{width:46px;height:46px;border-radius:50%;flex:none;padding:0}
 .mic svg{width:20px;height:20px}
-.toggle{display:inline-flex;gap:6px;align-items:center;font-size:14px;color:var(--muted);cursor:pointer}
+.audio-active{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ok);font-weight:700}
 
 /* misc */
 .loading{display:flex;gap:12px;align-items:center;padding:28px 0;color:var(--muted)}
-.dots{display:inline-flex;gap:4px}
-.dots i{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:b 1s infinite ease-in-out}
-.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
-@keyframes b{0%,80%,100%{opacity:.25}40%{opacity:1}}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:700;z-index:20;max-width:90vw}
 .back{margin:18px 0 6px}
 .lesson-title{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-.02em;margin:6px 0 8px}
@@ -202,10 +197,6 @@ input[type=text]:focus,textarea:focus{border-color:var(--accent);outline:none}
 .stat{background:var(--soft);border-radius:14px;padding:14px}
 .stat b{display:block;font-family:var(--display);font-size:32px;line-height:1}
 .stat span{font-size:14px;color:var(--muted)}
-.errs{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:8px}
-.errs li{font-size:15px;padding:8px 12px;background:var(--soft);border-radius:10px}
-.errs s{color:var(--bad)}
-.errs b{color:var(--ok)}
 @media (max-width:600px){
   .course-head{grid-template-columns:1fr;gap:10px}
   .msg{max-width:92%}
@@ -306,10 +297,27 @@ const SCEN = [
   {k:"meet",t:"Reunião técnica",d:"alinhamento de projetos, prazos e arquitetura de soluções"}
 ];
 
+const SCEN_FIRST_QUESTION = {
+  en: {
+    livre: "Hello! It is a pleasure to talk with you. What would you like to practice discussing today?",
+    rest: "Good evening! Welcome to our restaurant. Here is the menu. What can I get started for you today?",
+    hotel: "Good afternoon! Welcome to the Grand Central Hotel. Do you have a reservation with us?",
+    job: "Hello! Thank you for coming today. Could you please start by introducing yourself and telling me about your background?",
+    meet: "Hi team! Thanks for joining on time. Shall we review our main priorities and deliverables for this week?"
+  },
+  es: {
+    livre: "¡Hola! Es un placer conversar contigo hoy. ¿De qué tema te gustaría hablar en nuestra práctica?",
+    rest: "¡Buenas tardes! Bienvenido a nuestro restaurante. Aquí tiene la carta. ¿Qué le gustaría ordenar para comenzar?",
+    hotel: "¡Buenas tardes! Bienvenido a nuestro hotel. ¿Tiene usted una reserva confirmada con nosotros?",
+    job: "¡Hola! Muchas gracias por asistir hoy. Para comenzar, ¿podrías presentarte y comentar brevemente tu experiencia?",
+    meet: "¡Hola a todos! Gracias por su puntualidad. ¿Comenzamos revisando las prioridades y objetivos para esta semana?"
+  }
+};
+
 const ICON_SPK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 const ICON_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg>';
 
-/* ---------- STORAGE SEGURO (COM FALLBACK EM MEMÓRIA) ---------- */
+/* ---------- STORAGE SEGURO ---------- */
 const memoryStore = {};
 function lsGet(k){
   try{
@@ -333,7 +341,7 @@ const freshProfile = () => ({level:null,done:{},xp:0,streak:0,lastDay:null,histo
 let S = {lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95},updatedAt:0};
 const U = {view:"home",tab:"lessons",browse:null,pl:null,lesson:null,chat:{en:null,es:null},chatInput:"",listening:false,speak:{},drill:{en:{items:[],busy:false},es:{items:[],busy:false}},drillCustom:"",toast:"",dict:{}};
 
-const savedState = lsGet("pdi-state-v3");
+const savedState = lsGet("pdi-state-v4");
 if(savedState && typeof savedState === "object"){
   if(savedState.lang) S.lang = savedState.lang;
   if(savedState.profiles){
@@ -346,7 +354,7 @@ if(savedState && typeof savedState === "object"){
 
 function save(){
   S.updatedAt = Date.now();
-  lsSet("pdi-state-v3", S);
+  lsSet("pdi-state-v4", S);
 }
 
 const P = () => S.profiles[S.lang];
@@ -356,7 +364,7 @@ const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">
 
 /* ---------- SIMULADOR INTELIGENTE NATIVO ---------- */
 async function ai(prompt, json=false){
-  await new Promise(r => setTimeout(r, 300));
+  await new Promise(r => setTimeout(r, 350));
   const pStr = typeof prompt === "string" ? prompt : JSON.stringify(prompt);
 
   if(pStr.includes("Avalie o nível QECR")){
@@ -364,16 +372,6 @@ async function ai(prompt, json=false){
       level: "B1",
       reason: "Texto estruturado de forma consistente, com boa transmissão de ideias e vocabulário contextualizado.",
       strengths: "Uso adequado de tempos verbais e clareza no propósito das frases."
-    };
-  }
-  if(pStr.includes("Corrija o texto")){
-    return {
-      score: 88,
-      corrected: "In my daily routine, I work on technical projects, and during the evening I prefer to study and stay active.",
-      feedback: "Muito bom desenvolvimento! Estrutura natural e vocabulário sólido.",
-      errors: [
-        {original:"in the night",fix:"in the evening / at night",why:"Usa-se 'in the evening' ou 'at night' para descrever o período da noite."}
-      ]
     };
   }
   if(pStr.includes("Gere 5 frases")){
@@ -409,7 +407,7 @@ async function ai(prompt, json=false){
     return {text: pool[Math.floor(Math.random() * pool.length)] + "\n✎ Bom vocabulário e estrutura clara."};
   }
 
-  // Lição dinâmica por defeito
+  // Lição dinâmica padrão
   const isEn = S.lang === "en";
   return {
     title: isEn ? "Comunicação e Alinhamento Técnico" : "Comunicación y Alineación Profesional",
@@ -524,15 +522,32 @@ function srMsg(e){
   return "Não foi possível reconhecer o áudio. Pode introduzir a frase por texto no botão ao lado.";
 }
 
+let voices = [];
+function loadVoices(){
+  try{ voices = speechSynthesis.getVoices(); }catch(e){}
+}
+if("speechSynthesis" in window){
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
 function speak(text, lang=S.lang){
   if(!("speechSynthesis" in window) || !text) return;
   try{
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = LANGS[lang].bcp;
+    const pref = LANGS[lang].bcp;
+    u.lang = pref;
     u.rate = S.settings.rate || 0.95;
+    
+    if(voices.length === 0) loadVoices();
+    const voice = voices.find(v => v.lang === pref) || voices.find(v => (v.lang||"").toLowerCase().startsWith(lang));
+    if(voice) u.voice = voice;
+
     speechSynthesis.speak(u);
-  }catch(e){}
+  }catch(e){
+    console.warn("Erro ao sintetizar voz:", e);
+  }
 }
 
 function norm(s){
@@ -644,11 +659,11 @@ function home(){
   const isFile = location.protocol === "file:";
   return `<main class="wrap">
     ${isFile ? `<div class="notice" style="background:#fff3cd;color:#856404;border:1px solid #ffeeba;margin-bottom:18px;">
-      <b>Dica de Execução:</b> O ficheiro está a ser acedido diretamente do disco (<code>file:///</code>). O reconhecimento por microfone requer <code>http://localhost</code>. Poderá utilizar os botões de digitação integrados para praticar sem restrições.
+      <b>Dica de Execução:</b> O ficheiro está a ser acedido diretamente do disco (<code>file:///</code>)[cite: 2, 3]. Para microfone em tempo real, execute em <code>http://localhost:8000</code>[cite: 1, 3]. Os botões de áudio e digitação funcionam normalmente[cite: 1].
     </div>` : ""}
     <section class="hero">
       <h1>Leia, escreva e converse em inglês e espanhol.</h1>
-      <p class="lede">Faça o teste inicial para encontrar o seu nível exato no quadro QECR (A1 a C2) ou inicie as lições modulares interativas.</p>
+      <p class="lede">Faça o teste inicial para encontrar o seu nível exato no quadro QECR (A1 a C2) ou inicie as lições modulares interativas[cite: 1].</p>
     </section>
     <div class="langs">
       ${["en","es"].map(k=>{
@@ -673,9 +688,9 @@ function placement(){
 
   if(pl.step === "intro"){
     body = `<h1 class="lesson-title">Avaliação inicial de ${L().name.toLowerCase()}</h1>
-      <p class="lede">Responda às questões com tranquilidade para posicionar o curso no seu nível ideal.</p>
+      <p class="lede">Responda às questões com tranquilidade para posicionar o curso no seu nível ideal[cite: 1].</p>
       <ol class="steps">
-        <li><b>Gramática e vocabulário:</b> 15 perguntas de escolha múltipla.</li>
+        <li><b>Gramática e vocabulário:</b> 15 perguntas de escolha múltipla[cite: 1].</li>
         <li><b>Escrita:</b> Produção de um breve texto para análise de coesão[cite: 1].</li>
         <li><b>Pronúncia e fala:</b> Leitura guiada de 4 frases práticas[cite: 1].</li>
       </ol>
@@ -900,27 +915,53 @@ function completeLesson(){
   toast("Lição concluída! +35 XP adicionados.");
 }
 
+/* ---------- CONVERSAÇÃO / CHAT COM ÁUDIO ATIVO ---------- */
 function chatView(){
   const c = U.chat[S.lang];
   if(!c){
-    return `<p class="muted" style="margin-top:0">Escolha um cenário para iniciar um diálogo interativo[cite: 1]:</p>
+    return `<p class="muted" style="margin-top:0">Escolha um cenário para iniciar um diálogo por áudio e texto com o professor virtual[cite: 1]:</p>
       <div class="scen">${SCEN.map(s=>`<button data-act="scen" data-v="${s.k}"><strong>${s.t}</strong><span>${s.d}</span></button>`).join("")}</div>`;
   }
   const sc = SCEN.find(s=>s.k===c.scenario) || SCEN[0];
   return `<div class="chat">
     <div class="chat-bar">
-      <strong>${sc.t}</strong>
+      <div>
+        <strong>${sc.t}</strong>
+        <span class="audio-active" style="margin-left:10px;">${ICON_SPK} Áudio Automático Ativo</span>
+      </div>
       <button class="btn ghost sm" data-act="chatreset">Mudar cenário</button>
     </div>
     <div class="chat-log" id="chat-log">
-      ${c.msgs.map(m=>`<div class="msg ${m.who}"><div class="bubble">${esc(m.text)}</div>${m.fix?`<div class="fix">${esc(m.fix)}</div>`:""}</div>`).join("")}
+      ${c.msgs.map(m=>`<div class="msg ${m.who}">
+        <div class="bubble">${esc(m.text)}</div>${m.fix?`<div class="fix">${esc(m.fix)}</div>`:""}
+        ${m.who==="tutor"?`<div class="msg-tools"><button data-act="tts" data-t="${esc(m.text)}">${ICON_SPK} Ouvir pergunta novamente</button></div>`:""}
+      </div>`).join("")}
     </div>
     <div class="composer">
-      <button class="btn mic ${U.listening?"rec":""}" data-act="chatmic" aria-label="Microfone">${ICON_MIC}</button>
-      <textarea id="chat-in" data-k="chatInput" placeholder="Escreva ou fale a sua mensagem...">${esc(U.chatInput)}</textarea>
+      <button class="btn mic ${U.listening?"rec":""}" data-act="chatmic" aria-label="Falar pelo microfone">${ICON_MIC}</button>
+      <textarea id="chat-in" data-k="chatInput" placeholder="Responda por voz pelo microfone ou digite aqui...">${esc(U.chatInput)}</textarea>
       <button class="btn primary" data-act="chatsend">Enviar</button>
     </div>
   </div>`;
+}
+
+function startScenario(scenarioKey){
+  const lang = S.lang;
+  const initialText = SCEN_FIRST_QUESTION[lang][scenarioKey] || (lang === "en" ? "Hello! How can I help you today?" : "¡Hola! ¿Cómo estás hoy?");
+
+  U.chat[lang] = {
+    scenario: scenarioKey,
+    msgs: [
+      { who: "tutor", text: initialText, fix: "" }
+    ]
+  };
+
+  render();
+  
+  // Realiza a pergunta inicial imediatamente em áudio
+  setTimeout(() => {
+    speak(initialText, lang);
+  }, 250);
 }
 
 async function chatSend(){
@@ -935,9 +976,14 @@ async function chatSend(){
   const r = await ai(c.msgs, false);
   const text = r.text || "";
   const parts = text.split("✎");
-  c.msgs.push({who:"tutor", text:parts[0].trim(), fix:parts[1]?parts[1].trim():""});
-  if(S.settings.autoSpeak) speak(parts[0].trim());
+  const replyText = parts[0].trim();
+  const feedback = parts[1] ? parts[1].trim() : "";
+
+  c.msgs.push({who:"tutor", text:replyText, fix:feedback});
   render();
+
+  // Reproduz a réplica/pergunta seguinte do professor em áudio
+  speak(replyText, S.lang);
 }
 
 async function chatMic(){
@@ -1042,10 +1088,7 @@ const ACT = {
   },
   complete(){ completeLesson(); },
   scen(d){
-    U.chat[S.lang] = {scenario:d.v, msgs:[
-      {who:"tutor", text: S.lang==="en" ? "Hello! How can I help you today?" : "¡Hola! ¿En qué puedo ayudarte hoy?"}
-    ]};
-    render();
+    startScenario(d.v);
   },
   chatreset(){ U.chat[S.lang] = null; render(); },
   chatsend(){ chatSend(); },
