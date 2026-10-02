@@ -196,7 +196,10 @@ input[type=text]:focus,textarea:focus{border-color:var(--accent);outline:none}
 .dict{margin-top:10px}
 .mic{width:46px;height:46px;border-radius:50%;flex:none;padding:0}
 .voice-bar{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);background:var(--accent-soft);font-weight:700}
-.voice-bar .btn{margin-left:auto}
+.voice-bar{flex-wrap:wrap}
+.vb-main{display:flex;flex-direction:column;gap:2px;flex:1;min-width:180px}
+.live{font-weight:400;font-style:italic;color:var(--muted)}
+.voice-bar .btn{flex:none}
 .pulse{width:14px;height:14px;border-radius:50%;background:var(--accent);flex:none}
 .voice-bar.listening .pulse{background:var(--bad);animation:pl 1.2s infinite}
 .voice-bar.speaking .pulse{animation:pl .8s infinite}
@@ -310,7 +313,7 @@ const ICON_MIC='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 
 /* ---------- estado ---------- */
 const freshProfile=()=>({level:null,done:{},xp:0,streak:0,lastDay:null,history:[]});
-let S={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95},updatedAt:0};
+let S={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95,pause:2.5},updatedAt:0};
 const U={view:"home",tab:"lessons",browse:null,pl:null,lesson:null,chat:{en:null,es:null},chatInput:"",listening:false,speak:{},drill:{en:{items:[],busy:false,err:""},es:{items:[],busy:false,err:""}},drillCustom:"",toast:"",showReset:false};
 const P=()=>S.profiles[S.lang];
 const L=()=>LANGS[S.lang];
@@ -318,7 +321,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function normalizeState(x){
-  const s={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95},updatedAt:0};
+  const s={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95,pause:2.5},updatedAt:0};
   if(!x||typeof x!=="object")return s;
   if(x.lang==="es"||x.lang==="en")s.lang=x.lang;
   for(const k of ["en","es"]){const p=x.profiles&&x.profiles[k];if(p)s.profiles[k]={...freshProfile(),...p,done:p.done||{},history:Array.isArray(p.history)?p.history:[]}}
@@ -435,17 +438,50 @@ function speakAsync(text,lang=S.lang){
 function speak(text,lang=S.lang){speakAsync(text,lang)}
 let activeRec=null;
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-function listen(lang=S.lang){
+/* Escuta contínua: só encerra depois de uma pausa real (ajustável), não na primeira respirada. */
+let activeListen=null;
+function listen(lang=S.lang,{onInterim,pauseMs}={}){
   return new Promise((res,rej)=>{
     if(!SR)return rej({code:"no_sr"});
-    let r;try{r=new SR()}catch(e){return rej({code:"no_sr"})}
-    r.lang=LANGS[lang].bcp;r.interimResults=false;r.maxAlternatives=1;
-    let done=false;
-    r.onresult=e=>{done=true;res(e.results[0][0].transcript)};
-    r.onerror=e=>{if(!done){done=true;rej({code:e.error})}};
-    r.onend=()=>{if(!done){done=true;rej({code:"no-speech"})}};
-    activeRec=r;
-    try{r.start()}catch(e){done=true;rej({code:"start"})}
+    const pause=pauseMs||Math.round((S.settings.pause||2.5)*1000);
+    const maxWait=15000;
+    let base="",sessF="",interim="",done=false,silenceT=null,rec=null;
+    const text=()=>(base+" "+sessF+" "+interim).replace(/\s+/g," ").trim();
+    const finish=(ok,err)=>{
+      if(done)return;done=true;
+      clearTimeout(silenceT);clearTimeout(startT);activeListen=null;
+      try{rec&&rec.abort()}catch(e){}
+      const t=text();
+      if(ok&&t)res(t);else rej(err||{code:"no-speech"});
+    };
+    const startT=setTimeout(()=>{if(!text())finish(false,{code:"no-speech"})},maxWait);
+    const armSilence=()=>{clearTimeout(silenceT);silenceT=setTimeout(()=>finish(true),pause)};
+    const start=()=>{
+      if(done)return;
+      try{rec=new SR()}catch(e){return finish(false,{code:"no_sr"})}
+      activeRec=rec;
+      rec.lang=LANGS[lang].bcp;rec.continuous=true;rec.interimResults=true;rec.maxAlternatives=1;
+      rec.onresult=e=>{
+        let f="",it="";
+        for(let i=0;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)f+=t+" ";else it+=t+" "}
+        sessF=f;interim=it;
+        if(onInterim)onInterim(text());
+        if(text())armSilence();
+      };
+      rec.onerror=e=>{
+        if(done)return;
+        if(["not-allowed","service-not-allowed","audio-capture"].includes(e.error))finish(false,{code:e.error});
+        else if(e.error==="network")finish(false,{code:"network-sr"});
+      };
+      rec.onend=()=>{
+        if(done)return;
+        base=(base+" "+sessF+" "+interim).trim();sessF="";interim="";
+        setTimeout(start,120);
+      };
+      try{rec.start()}catch(e){finish(false,{code:"start"})}
+    };
+    activeListen={finishNow:()=>finish(true),cancel:()=>finish(false,{code:"aborted"})};
+    start();
   });
 }
 let micBlocked=false;
@@ -464,6 +500,7 @@ function srMsg(e){
   if(c==="not-allowed"||c==="service-not-allowed")return"Dentro do claude.ai o app não recebe acesso direto ao microfone. Use o ditado por voz do seu sistema, como mostrado abaixo.";
   if(c==="no-speech")return"Não ouvi nada. Toque em Falar e comece logo em seguida.";
   if(c==="audio-capture")return"Nenhum microfone encontrado.";
+  if(c==="network-sr")return"O reconhecimento de voz precisa de internet. Verifique sua conexão.";
   return"O reconhecimento de voz falhou. Tente de novo.";
 }
 function norm(s){return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9'\s]/g," ").replace(/\s+/g," ").trim()}
@@ -495,13 +532,13 @@ function speakItem(id,sentence){
   const sc=r.score!=null?`<span class="score ${r.score>=75?"good":r.score>=50?"mid":"low"}">${r.score}%</span>`:"";
   return`<div class="say"><p class="say-text">${text}</p><div class="say-row">
     <button class="btn ghost sm" data-act="tts" data-t="${esc(sentence)}">${ICON_SPK} Ouvir</button>
-    <button class="btn sm ${r.listening?"rec":""}" data-act="sr" data-id="${esc(id)}" data-t="${esc(sentence)}" ${r.listening?"disabled":""}>${ICON_MIC} ${r.listening?"Ouvindo…":"Falar"}</button>${sc}</div>
+    <button class="btn sm ${r.listening?"rec":""}" data-act="sr" data-id="${esc(id)}" data-t="${esc(sentence)}">${ICON_MIC} ${r.listening?"Terminei":"Falar"}</button>${r.listening?`<span class="muted small" id="live-${esc(id)}">Ouvindo…</span>`:""}${sc}</div>
     ${r.heard?`<p class="heard">Entendi: “${esc(r.heard)}”</p>`:""}${r.err?`<p class="err">${esc(r.err)}</p>`:""}
     ${micBlocked?`<div class="dict"><p class="tip" style="margin:0 0 8px">Para treinar falando: ${dictHint()}, leia a frase em voz alta e toque em Comparar.</p><div class="inline-form"><input type="text" data-k="dict.${esc(id)}" value="${esc((U.dict||{})[id]||"")}" placeholder="O que você falou aparece aqui" aria-label="Texto ditado"><button class="btn sm" data-act="dictcmp" data-id="${esc(id)}" data-t="${esc(sentence)}">Comparar</button></div></div>`:""}</div>`;
 }
 async function doSR(id,t){
   U.speak[id]={...(U.speak[id]||{}),listening:true,err:""};render();
-  try{const heard=await listen();const c=compare(t,heard);U.speak[id]={heard,score:c.score,words:c.words}}
+  try{const heard=await listen(S.lang,{onInterim:x=>{const el=document.getElementById("live-"+id);if(el)el.textContent=x}});const c=compare(t,heard);U.speak[id]={heard,score:c.score,words:c.words}}
   catch(e){if(["not-allowed","service-not-allowed","no_sr"].includes(e&&e.code))micBlocked=true;U.speak[id]={...(U.speak[id]||{}),listening:false,err:srMsg(e)}}
   render();
 }
@@ -527,7 +564,10 @@ function settingsView(){
     <div class="inline-form" style="margin-top:12px"><input type="password" id="api-key" data-k="keyInput" value="${esc(U.keyInput??k)}" placeholder="sk-ant-..." aria-label="Chave da API" autocomplete="off"><button class="btn primary" data-act="savekey">Salvar e testar</button></div>
     ${st==="testing"?`<p class="loading" style="padding:10px 0 0">${dots} Testando a conexão…</p>`:st==="ok"?`<p class="fb good">Conexão funcionando. Os recursos com IA estão liberados.</p>`:st?`<p class="err">${esc(st)}</p>`:""}
     ${k?`<p style="margin-top:12px"><button class="linkish" data-act="delkey">Remover chave deste aparelho</button></p>`:""}</section>
-  <section class="panel"><h3>Microfone</h3><p class="muted small">Na primeira vez que você tocar em Falar ou em Conversar por voz, o navegador pede permissão. Use Chrome ou Edge no computador; no iPad, o Safari com o Ditado ativado em Ajustes > Geral > Teclado.</p></section></main>`;
+  <section class="panel"><h3>Microfone</h3><p class="muted small">Na primeira vez que você tocar em Falar ou em Conversar por voz, o navegador pede permissão. Use Chrome ou Edge no computador; no iPad, o Safari com o Ditado ativado em Ajustes > Geral > Teclado.</p>
+    <label class="small" for="pause2" style="display:block;margin-top:14px">Tempo de pausa antes de considerar que você terminou de falar: ${(S.settings.pause||2.5).toFixed(1)} s</label>
+    <input id="pause2" type="range" min="1.5" max="6" step="0.5" value="${S.settings.pause||2.5}" data-act="pause" style="width:100%;max-width:320px;display:block;margin:8px 0">
+    <p class="muted small" style="margin:0">Se o app corta você no meio da frase, aumente. Na conversa, você também pode tocar em Terminei de falar.</p></section></main>`;
 }
 function home(){
   return`<main class="wrap"><section class="hero"><h1>Leia, escreva e converse em inglês e espanhol.</h1>
@@ -643,7 +683,10 @@ function progressView(){
     <label class="small muted" for="lvl-set">Mudar nível:</label><select id="lvl-set" data-act="setlevel" style="width:auto">${LEVELS.map(l=>`<option ${l===p.level?"selected":""}>${l}</option>`).join("")}</select></div></div>
   <div class="panel"><h3>Voz</h3><label class="small" for="rate">Velocidade da leitura em voz alta: ${(S.settings.rate||.95).toFixed(2)}x</label>
     <input id="rate" type="range" min="0.6" max="1.2" step="0.05" value="${S.settings.rate||.95}" data-act="rate" style="width:100%;max-width:320px;display:block;margin:8px 0">
-    <button class="btn ghost sm" data-act="tts" data-t="${esc(S.lang==="en"?"This is how I sound at this speed.":"Así sueno a esta velocidad.")}">${ICON_SPK} Testar voz</button></div>
+    <button class="btn ghost sm" data-act="tts" data-t="${esc(S.lang==="en"?"This is how I sound at this speed.":"Así sueno a esta velocidad.")}">${ICON_SPK} Testar voz</button>
+    <label class="small" for="pause" style="display:block;margin-top:18px">Tempo de pausa antes de considerar que você terminou de falar: ${(S.settings.pause||2.5).toFixed(1)} s</label>
+    <input id="pause" type="range" min="1.5" max="6" step="0.5" value="${S.settings.pause||2.5}" data-act="pause" style="width:100%;max-width:320px;display:block;margin:8px 0">
+    <p class="muted small" style="margin:0">Se o app corta você no meio da frase, aumente. Você também pode tocar em Terminei de falar a qualquer momento.</p></div>
   <div class="panel"><h3>Recomeçar</h3><p class="muted small">Apaga nível, lições concluídas e XP de ${L().name.toLowerCase()}. O outro idioma não é afetado.</p>
     ${U.showReset?`<div class="row"><button class="btn" style="border-color:var(--bad);color:var(--bad)" data-act="reset">Apagar progresso de ${L().name.toLowerCase()}</button><button class="linkish" data-act="noreset">Cancelar</button></div>`:`<button class="btn ghost" data-act="askreset">Apagar progresso</button>`}</div>`;
 }
@@ -839,11 +882,11 @@ async function voiceLoop(){
   while(U.voice&&U.chat[lang]===c&&S.lang===lang){
     U.voiceState="listening";render();
     let t;
-    try{t=await listen(lang)}
+    try{t=await listen(lang,{onInterim:x=>{const el=document.getElementById("live-text");if(el)el.textContent=x}})}
     catch(e){
       const code=e&&e.code;
       if(code==="aborted"||!U.voice)break;
-      if(code==="no-speech"&&misses<2){misses++;continue}
+      if(code==="no-speech"&&misses<1){misses++;continue}
       if(["not-allowed","service-not-allowed","no_sr"].includes(code))micBlocked=true;
       U.micErr=micBlocked?"":code==="no-speech"?"Não ouvi nada por um tempo, então pausei a conversa. Toque em Conversar por voz para continuar.":srMsg(e);
       break;
@@ -856,12 +899,13 @@ async function voiceLoop(){
     if(!reply||!U.voice)break;
     U.voiceState="speaking";render();
     await speakAsync(reply,lang);
+    await new Promise(r=>setTimeout(r,450));
   }
   U.voice=false;U.voiceState="";render();
 }
 function stopVoice(){
   U.voice=false;U.voiceState="";
-  try{activeRec&&activeRec.abort()}catch(e){}
+  try{activeListen&&activeListen.cancel()}catch(e){}
   try{speechSynthesis.cancel()}catch(e){}
   const c=U.chat[S.lang];if(c&&c.ctl)c.ctl.abort();
   render();
@@ -885,8 +929,8 @@ function chatView(){
       ${m.fix?`<div class="fix">✎ ${esc(m.fix)}</div>`:""}${m.pt?`<div class="pt">${esc(m.pt)}</div>`:""}
       ${m.pending?"":`<div class="msg-tools"><button data-act="tts" data-t="${esc(m.text)}">Ouvir</button><button data-act="chatpt" data-i="${i}">${m.ptBusy?"Traduzindo…":"Ver em português"}</button></div>`}</div>`).join("")}
       ${c.err?`<p class="err">${esc(c.err)}</p>`:""}</div>
-    ${U.voice?`<div class="voice-bar ${U.voiceState}"><span class="pulse"></span><span>${U.voiceState==="listening"?"Ouvindo… pode falar em "+L().name.toLowerCase():U.voiceState==="thinking"?"Pensando na resposta…":"Professor falando…"}</span><button class="btn sm" data-act="voicestop">Parar conversa</button></div>`:""}
-    <div class="composer"><button class="btn mic ${U.listening?"rec":""}" data-act="chatmic" aria-label="${U.listening?"Ouvindo":"Falar pelo microfone"}" ${c.busy?"disabled":""}>${ICON_MIC}</button>
+    ${U.voice?`<div class="voice-bar ${U.voiceState}"><span class="pulse"></span><span class="vb-main"><span>${U.voiceState==="listening"?"Ouvindo… fale com calma em "+L().name.toLowerCase():U.voiceState==="thinking"?"Pensando na resposta…":"Professor falando…"}</span>${U.voiceState==="listening"?`<span class="live" id="live-text"></span>`:""}</span>${U.voiceState==="listening"?`<button class="btn primary sm" data-act="voicedone">Terminei de falar</button>`:""}<button class="btn sm" data-act="voicestop">Parar</button></div>`:""}
+    <div class="composer"><button class="btn mic ${U.listening?"rec":""}" data-act="chatmic" aria-label="${U.listening?"Terminei de falar":"Falar pelo microfone"}" title="${U.listening?"Toque para enviar":"Falar"}" ${c.busy?"disabled":""}>${ICON_MIC}</button>
       <textarea id="chat-in" data-k="chatInput" placeholder="${U.listening?"Ouvindo…":"Escreva em "+L().name.toLowerCase()+"…"}" aria-label="Mensagem">${esc(U.chatInput)}</textarea>
       ${c.busy?`<button class="btn" data-act="chatstop">Parar</button>`:`<button class="btn primary" data-act="chatsend">Enviar</button>`}</div></div>
     ${U.micErr?`<p class="err">${esc(U.micErr)}</p>`:""}
@@ -942,7 +986,7 @@ const ACT={
   toggletr(){U.lesson.showTr=!U.lesson.showTr;render()},
   tts(d){speak(d.t)},
   stoptts(){try{speechSynthesis.cancel()}catch(e){}},
-  sr(d){doSR(d.id,d.t)},
+  sr(d){if(U.speak[d.id]&&U.speak[d.id].listening){activeListen&&activeListen.finishNow();return}if(activeListen)return;doSR(d.id,d.t)},
   mc(d){U.lesson.mc[+d.i]=+d.o;render()},
   fill(d){checkFill(+d.i)},
   showfill(d){U.lesson.checked[+d.i]="shown";render()},
@@ -953,6 +997,7 @@ const ACT={
   chatreset(){stopVoice();const c=U.chat[S.lang];if(c&&c.ctl)c.ctl.abort();U.chat[S.lang]=null;render()},
   voicestart(){voiceLoop()},
   voicestop(){stopVoice()},
+  voicedone(){activeListen&&activeListen.finishNow()},
   settings(){U.view="settings";U.keyStatus="";U.keyInput=undefined;render();window.scrollTo(0,0)},
   async savekey(){
     const k=(U.keyInput??getKey()).trim();if(!k){U.keyStatus="Cole sua chave antes de salvar.";render();return}
@@ -965,9 +1010,11 @@ const ACT={
   chatsend(){chatSend()},
   chatstop(){const c=U.chat[S.lang];if(c&&c.ctl)c.ctl.abort()},
   async chatmic(){
-    const c=U.chat[S.lang];if(!c||c.busy||U.listening)return;
+    const c=U.chat[S.lang];if(!c||c.busy)return;
+    if(U.listening){activeListen&&activeListen.finishNow();return}
+    if(U.voice||activeListen)return;
     U.listening=true;U.micErr="";render();
-    try{const t=await listen();U.listening=false;U.chatInput=t;chatSend()}
+    try{const t=await listen(S.lang,{onInterim:x=>{const ta=document.getElementById("chat-in");if(ta)ta.value=x}});U.listening=false;U.chatInput=t;chatSend()}
     catch(e){U.listening=false;if(["not-allowed","service-not-allowed","no_sr"].includes(e&&e.code)){micBlocked=true;U.micErr=""}else U.micErr=srMsg(e);render();const ta=document.getElementById("chat-in");if(ta&&micBlocked)ta.focus()}
   },
   chatpt(d){chatPt(d.i)},
@@ -982,6 +1029,7 @@ const CHG={
   plchoose(el){U.pl.chosen=el.value;render()},
   setlevel(el){const p=P();if(p.level===el.value)return;p.level=el.value;p.history.push({date:today(),level:el.value,manual:true});save();U.browse=null;render()},
   rate(el){S.settings.rate=+el.value;save();render()},
+  pause(el){S.settings.pause=+el.value;save();render()},
   autospeak(el){S.settings.autoSpeak=el.checked;save()}
 };
 document.addEventListener("click",e=>{
