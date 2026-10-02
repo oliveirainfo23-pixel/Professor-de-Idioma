@@ -184,7 +184,7 @@ input[type=text]:focus,textarea:focus{border-color:var(--accent);outline:none}
 .bubble{padding:10px 14px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.tutor .bubble{background:var(--soft);border-bottom-left-radius:4px}
 .msg.me .bubble{background:var(--accent);color:var(--on-accent);border-bottom-right-radius:4px}
-.fix{font-size:14px;padding:8px 12px;border-radius:10px;border:1px dashed var(--mid);color:var(--ink);background:color-mix(in srgb,var(--mid) 8%,var(--surface))}
+.fix{white-space:pre-wrap;font-size:14px;padding:8px 12px;border-radius:10px;border:1px dashed var(--mid);color:var(--ink);background:color-mix(in srgb,var(--mid) 8%,var(--surface))}
 .pt{font-size:14px;color:var(--muted);font-style:italic}
 .msg-tools{display:flex;gap:6px}
 .msg-tools button{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 4px;text-decoration:underline}
@@ -197,6 +197,33 @@ input[type=text]:focus,textarea:focus{border-color:var(--accent);outline:none}
 .mic{width:46px;height:46px;border-radius:50%;flex:none;padding:0}
 .voice-bar{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);background:var(--accent-soft);font-weight:700}
 .voice-bar{flex-wrap:wrap}
+.teacher-pick{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.teacher-pick p{width:100%}
+.voice-row{margin-top:12px}
+.voice-row select{flex:1;min-width:0}
+.voice-stage{height:min(56vh,520px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px}
+.vs-title{font-family:var(--display);font-weight:800;font-size:clamp(26px,4vw,36px);margin:10px 0 0}
+.voice-stage .muted{max-width:42ch;margin:0}
+.orb{width:120px;height:120px;border-radius:50%;background:var(--accent);opacity:.9}
+.voice-stage.listening .orb{background:var(--bad);animation:orb 1.6s infinite ease-in-out}
+.voice-stage.speaking .orb{animation:orb .9s infinite ease-in-out}
+.voice-stage.thinking .orb{opacity:.45;animation:orb 2.4s infinite ease-in-out}
+@keyframes orb{0%,100%{transform:scale(.88)}50%{transform:scale(1)}}
+.sum-h{font-family:var(--display);font-size:17px;margin:18px 0 6px}
+.eval-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+.eval-score{font-family:var(--display);font-weight:800;font-size:64px;line-height:.9;margin:4px 0;letter-spacing:-.03em}
+.eval-score small{font-size:20px;color:var(--muted);font-weight:700}
+.eval-score.good{color:var(--ok)}.eval-score.mid{color:var(--mid)}.eval-score.low{color:var(--bad)}
+.eval-lvl{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.eval-lvl b{font-family:var(--display);font-size:44px;line-height:1;color:var(--accent)}
+.dims{display:grid;gap:10px;margin-top:8px}
+.dim-top{display:flex;justify-content:space-between;font-size:15px;margin-bottom:4px}
+.dim-bar{height:8px;background:var(--soft);border-radius:99px;overflow:hidden}
+.dim-bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.delta{font-size:13px;font-weight:700;margin-left:4px}
+.delta.up{color:var(--ok)}.delta.down{color:var(--bad)}.delta.eq{color:var(--muted);font-weight:400}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 24px}
+.plain{margin:0;padding-left:20px}.plain li{margin-bottom:4px}
 .vb-main{display:flex;flex-direction:column;gap:2px;flex:1;min-width:180px}
 .live{font-weight:400;font-style:italic;color:var(--muted)}
 .voice-bar .btn{flex:none}
@@ -312,8 +339,8 @@ const ICON_SPK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 const ICON_MIC='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg>';
 
 /* ---------- estado ---------- */
-const freshProfile=()=>({level:null,done:{},xp:0,streak:0,lastDay:null,history:[]});
-let S={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95,pause:2.5},updatedAt:0};
+const freshProfile=()=>({level:null,done:{},xp:0,streak:0,lastDay:null,history:[],convs:[]});
+let S={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95,pause:2.5,teacher:"m",voices:{}},updatedAt:0};
 const U={view:"home",tab:"lessons",browse:null,pl:null,lesson:null,chat:{en:null,es:null},chatInput:"",listening:false,speak:{},drill:{en:{items:[],busy:false,err:""},es:{items:[],busy:false,err:""}},drillCustom:"",toast:"",showReset:false};
 const P=()=>S.profiles[S.lang];
 const L=()=>LANGS[S.lang];
@@ -321,10 +348,10 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function normalizeState(x){
-  const s={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95,pause:2.5},updatedAt:0};
+  const s={lang:"en",profiles:{en:freshProfile(),es:freshProfile()},settings:{autoSpeak:true,rate:0.95,pause:2.5,teacher:"m",voices:{}},updatedAt:0};
   if(!x||typeof x!=="object")return s;
   if(x.lang==="es"||x.lang==="en")s.lang=x.lang;
-  for(const k of ["en","es"]){const p=x.profiles&&x.profiles[k];if(p)s.profiles[k]={...freshProfile(),...p,done:p.done||{},history:Array.isArray(p.history)?p.history:[]}}
+  for(const k of ["en","es"]){const p=x.profiles&&x.profiles[k];if(p)s.profiles[k]={...freshProfile(),...p,done:p.done||{},history:Array.isArray(p.history)?p.history:[],convs:Array.isArray(p.convs)?p.convs:[]}}
   if(x.settings)s.settings={...s.settings,...x.settings};
   s.updatedAt=x.updatedAt||0;return s;
 }
@@ -422,20 +449,35 @@ function aiMsg(e){
 /* ---------- voz ---------- */
 let voices=[];
 function loadVoices(){try{voices=speechSynthesis.getVoices()}catch(e){}}
-if("speechSynthesis" in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices}
-function speakAsync(text,lang=S.lang){
+if("speechSynthesis" in window){loadVoices();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(U.view==="settings")render()}}
+const TEACH={es:{m:"Carlos",f:"Lucía"},en:{m:"James",f:"Emily"}};
+const tName=(g=S.settings.teacher,lang=S.lang)=>TEACH[lang][g==="f"?"f":"m"];
+const MALE_RE=/\b(male|homme|hombre|man|pablo|alvaro|álvaro|jorge|juan|diego|carlos|enrique|raul|raúl|guy|david|mark|james|george|daniel|alex|fred|tom|aaron|arthur|ryan|eric|christopher|roger|davis|tony|jason|brian|andrew|steffan|jacob|liam|gonzalo|dario|darío|jaime|tomas|tomás|thomas|oliver|reed|rocko|eddy|grandpa)\b/i;
+const FEMALE_RE=/\b(female|femme|mujer|woman|helena|laura|elvira|monica|mónica|paulina|marisol|lucia|lucía|sabina|dalia|jenny|aria|zira|hazel|susan|samantha|karen|moira|tessa|victoria|allison|ava|emma|libby|sonia|michelle|ana|elena|ximena|isabella|catalina|abril|nora|serena|joanna|salli|kendra|kimberly|ivy|conchita|lupe|penelope|amy|fiona|kate|zoe|flo|shelley|sandy|grandma|irene|esperanza|angelica|sara|elsa)\b|google español|google us english/i;
+function voiceGender(v){const n=v.name||"";if(MALE_RE.test(n))return"m";if(FEMALE_RE.test(n))return"f";return null}
+function langVoices(lang){const pre=lang.toLowerCase();return voices.filter(v=>(v.lang||"").toLowerCase().replace("_","-").startsWith(pre))}
+function pickVoice(lang,g){
+  const list=langVoices(lang);if(!list.length)return null;
+  if(g){const uri=(S.settings.voices||{})[lang+"-"+g];if(uri){const v=list.find(v=>v.voiceURI===uri);if(v)return v}}
+  const pref=LANGS[lang].bcp.toLowerCase();
+  const score=v=>((v.lang||"").toLowerCase().replace("_","-")===pref?4:0)+(/natural|online|neural|premium|enhanced|google/i.test(v.name)?2:0);
+  const pool=g?list.filter(v=>voiceGender(v)===g):list;
+  return(pool.length?pool:list).slice().sort((a,b)=>score(b)-score(a))[0];
+}
+function speakAsync(text,lang=S.lang,g=null){
   return new Promise(res=>{
     if(!("speechSynthesis" in window)||!text)return res();
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     const pref=LANGS[lang].bcp;u.lang=pref;u.rate=S.settings.rate||0.95;
-    const v=voices.find(v=>v.lang===pref)||voices.find(v=>(v.lang||"").toLowerCase().startsWith(lang));
+    const v=pickVoice(lang,g);
     if(v)u.voice=v;
+    if(g&&(!v||voiceGender(v)!==g))u.pitch=g==="m"?0.8:1.15;
     u.onend=()=>res();u.onerror=()=>res();
     speechSynthesis.speak(u);
   });
 }
-function speak(text,lang=S.lang){speakAsync(text,lang)}
+function speak(text,lang=S.lang,g=null){speakAsync(text,lang,g)}
 let activeRec=null;
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 /* Escuta contínua: só encerra depois de uma pausa real (ajustável), não na primeira respirada. */
@@ -564,6 +606,11 @@ function settingsView(){
     <div class="inline-form" style="margin-top:12px"><input type="password" id="api-key" data-k="keyInput" value="${esc(U.keyInput??k)}" placeholder="sk-ant-..." aria-label="Chave da API" autocomplete="off"><button class="btn primary" data-act="savekey">Salvar e testar</button></div>
     ${st==="testing"?`<p class="loading" style="padding:10px 0 0">${dots} Testando a conexão…</p>`:st==="ok"?`<p class="fb good">Conexão funcionando. Os recursos com IA estão liberados.</p>`:st?`<p class="err">${esc(st)}</p>`:""}
     ${k?`<p style="margin-top:12px"><button class="linkish" data-act="delkey">Remover chave deste aparelho</button></p>`:""}</section>
+  <section class="panel"><h3>Vozes</h3><p class="muted small">O app escolhe automaticamente uma voz masculina para o professor e uma feminina para a professora. Se a voz não combinar, escolha outra aqui. As opções dependem do navegador; o Edge costuma ter as vozes mais naturais.</p>
+    ${["es","en"].map(lang=>["m","f"].map(g=>{const list=langVoices(lang);const cur=(S.settings.voices||{})[lang+"-"+g]||"";return`<div class="voice-row"><label class="small" for="v-${lang}-${g}">${g==="m"?"Professor":"Professora"} ${TEACH[lang][g]} (${LANGS[lang].name.toLowerCase()})</label>
+      <div class="inline-form"><select id="v-${lang}-${g}" data-act="voicesel" data-v="${lang}-${g}"><option value="">Automática</option>${list.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===cur?"selected":""}>${esc(v.name)}</option>`).join("")}</select>
+      <button class="btn ghost sm" data-act="vtest" data-l="${lang}" data-g="${g}">${ICON_SPK} Testar</button></div></div>`}).join("")).join("")}
+    ${voices.length?"":`<p class="muted small">Nenhuma voz carregada ainda. Recarregue a página se a lista continuar vazia.</p>`}</section>
   <section class="panel"><h3>Microfone</h3><p class="muted small">Na primeira vez que você tocar em Falar ou em Conversar por voz, o navegador pede permissão. Use Chrome ou Edge no computador; no iPad, o Safari com o Ditado ativado em Ajustes > Geral > Teclado.</p>
     <label class="small" for="pause2" style="display:block;margin-top:14px">Tempo de pausa antes de considerar que você terminou de falar: ${(S.settings.pause||2.5).toFixed(1)} s</label>
     <input id="pause2" type="range" min="1.5" max="6" step="0.5" value="${S.settings.pause||2.5}" data-act="pause" style="width:100%;max-width:320px;display:block;margin:8px 0">
@@ -669,6 +716,16 @@ function lessonsList(){
   <ol class="lessons">${TOPICS[lv].map((t,i)=>{const key=`${lv}-${i}`,done=P().done[key];return`<li><button class="lesson-row ${done?"done":""}" data-act="lesson" data-v="${key}">
     <span class="lr-n">${i+1}</span><span class="lr-t"><strong>${t[0]}</strong><small>${t[1]}</small></span><span class="lr-s">${done?"Concluída":""}</span></button></li>`}).join("")}</ol>`;
 }
+function convProgress(p){
+  const cv=p.convs||[];
+  if(!cv.length)return`<div class="panel"><h3>Evolução nas conversas</h3><p class="muted small" style="margin:0">Termine uma conversa (por voz ou texto) para receber a primeira avaliação. Ela vira o seu ponto de partida.</p></div>`;
+  const avg=(arr,k)=>{const v=arr.map(h=>h.comp&&h.comp[k]).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null};
+  const recent=cv.slice(-3),before=cv.slice(-6,-3);
+  return`<div class="panel"><h3>Evolução nas conversas</h3>
+  <p class="muted small" style="margin-top:0">Média das últimas ${recent.length} ${recent.length===1?"conversa":"conversas"}${before.length?", comparada com as anteriores":""}.</p>
+  <div class="dims">${DIMS.map(([k,n])=>{const v=avg(recent,k);const pv=before.length?avg(before,k):null;return`<div class="dim"><div class="dim-top"><span>${n}</span><span><b>${v==null?"–":(Math.round(v*10)/10)}</b>/10 ${delta(v,pv)}</span></div><div class="dim-bar"><i style="width:${v==null?0:v*10}%"></i></div></div>`}).join("")}</div>
+  <div class="tbl" style="margin-top:16px"><table><thead><tr><th>Data</th><th>Situação</th><th>Nota</th><th>Nível</th></tr></thead><tbody>${cv.slice(-10).reverse().map(h=>`<tr><td>${esc(h.date)}</td><td>${esc(h.scen)}</td><td>${esc(h.nota)}</td><td>${esc(h.nivel)}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
 function progressView(){
   const p=P();
   const per=LEVELS.map(l=>[l,Object.keys(p.done).filter(k=>k.startsWith(l+"-")).length]);
@@ -677,6 +734,7 @@ function progressView(){
     <div class="stat"><b>${p.streak}</b><span>${p.streak===1?"dia seguido":"dias seguidos"} estudando</span></div>
     <div class="stat"><b>${Object.keys(p.done).length}</b><span>lições concluídas</span></div></div>
     <div class="tbl" style="margin-top:16px"><table><thead><tr><th>Nível</th><th>Lições concluídas</th></tr></thead><tbody>${per.map(([l,n])=>`<tr><td>${l}</td><td>${n} de 8</td></tr>`).join("")}</tbody></table></div></div>
+  ${convProgress(p)}
   <div class="panel"><h3>Nível</h3>
     ${p.history.length?`<div class="tbl"><table><thead><tr><th>Data</th><th>Resultado</th></tr></thead><tbody>${p.history.slice().reverse().map(h=>`<tr><td>${esc(h.date)}</td><td>${esc(h.level)}${h.manual?" (ajuste manual)":""}</td></tr>`).join("")}</tbody></table></div>`:""}
     <div class="row" style="margin-top:14px"><button class="btn" data-act="startpl" data-v="${S.lang}">Refazer avaliação</button>
@@ -838,15 +896,30 @@ function completeLesson(){
 
 /* conversa */
 function chatRules(c){
-  const lv=P().level,sc=SCEN.find(s=>s.k===c.scenario);
-  return`Você é um professor de ${L().ai} simpático conversando com um aluno brasileiro de nível ${lv} (QECR). Cenário: ${sc.d}.
-Regras:
-- Responda SEMPRE em ${L().ai}, em 1 a 3 frases, com vocabulário e gramática adequados ao nível ${lv}${["A1","A2"].includes(lv)?" (frases curtas e simples)":""}.
-- Mantenha o diálogo: termine quase sempre com uma pergunta ligada ao cenário.
-- Se a última mensagem do aluno tiver erros de gramática, vocabulário ou ortografia, depois da sua resposta pule uma linha e escreva UMA linha começando com ✎, em português, com a frase corrigida e o motivo em poucas palavras. Se não houver erros, não escreva essa linha.
-- As mensagens do aluno podem vir de reconhecimento de voz: ignore pontuação e maiúsculas.
-- Se o aluno escrever em português, responda em ${L().ai} de forma simples e mostre na linha ✎ como dizer aquilo em ${L().ai}.
-- Não use markdown nem emojis.`;
+  const lv=P().level,sc=SCEN.find(s=>s.k===c.scenario),lang=L().ai,basic=["A1","A2"].includes(lv);
+  const letters=S.lang==="es"?"a, be, ce, de, e, efe, ge, hache, i, jota, ka, ele, eme, ene, eñe, o, pe, cu, erre, ese, te, u, uve, uve doble, equis, ye, zeta":"ay, bee, see, dee, ee, ef, gee, aitch, eye, jay, kay, el, em, en, oh, pee, cue, ar, ess, tee, you, vee, double-u, ex, why, zee";
+  const g=c.g==="f"?"f":"m",nm=TEACH[S.lang][g];
+  return`Você é ${nm}, ${g==="f"?"uma professora (mulher)":"um professor (homem)"} de ${lang} nativ${g==="f"?"a":"o"}, que conversa com um aluno brasileiro de nível ${lv} (QECR), fazendo um papel numa situação real. Cenário: ${sc.d}.
+Fale sempre como ${g==="f"?"mulher":"homem"}: use a concordância de gênero correta quando falar de si mesm${g==="f"?"a":"o"} e adapte o papel do cenário (${g==="f"?"garçonete, atendente, entrevistadora, vendedora, farmacêutica":"garçom, atendente, entrevistador, vendedor, farmacêutico"}). Se se apresentar, use o nome ${nm}.
+Seu objetivo é que a conversa pareça natural e humana, e que o aluno pratique e aprenda.
+
+COMO FALAR
+- Responda sempre em ${lang}, com ${basic?"1 ou 2 frases curtas e vocabulário muito simples":"1 a 3 frases"}, adequadas ao nível ${lv}.
+- Faça UMA pergunta por vez e espere a resposta. Não presuma informações que o aluno não deu (datas, preços que ele não perguntou, tipo de quarto, nomes): pergunte.
+- Confirme brevemente o que entendeu antes de seguir, como uma pessoa real faria.
+- Sua resposta será lida em voz alta: não use símbolos, listas, parênteses, abreviações nem emojis.
+
+ENTENDER O ALUNO (voz)
+- As mensagens do aluno vêm de reconhecimento de voz e podem ter erros de transcrição: palavras trocadas, nomes escritos errado, frases cortadas no meio, falta de pontuação. Interprete a intenção mais provável pelo contexto da conversa.
+- Se a frase parecer cortada ou incompleta, peça gentilmente para o aluno completar, sem corrigir.
+- Se o aluno soletrar, interprete os nomes das letras (${letters}) e também letras soltas. Confirme o nome uma vez; se ainda houver dúvida, aceite a melhor versão e siga em frente. Nunca insista mais de uma vez no mesmo detalhe.
+- Se o aluno mostrar que não entendeu (por exemplo: "no entiendo", "qué", "cómo", "duda", "what", "sorry", repetir sua pergunta ou responder algo fora de contexto), repita a pergunta com palavras mais simples e ofereça duas opções de resposta.
+- Se o aluno falar em português, responda em ${lang} de forma simples e ensine como dizer aquilo.
+
+CORRIGIR
+- Quando o aluno errar, use a reformulação natural: na sua resposta, repita a forma correta do que ele quis dizer, sem interromper a conversa. Exemplo: aluno diz "Sí acepta tarjeta" e você responde "¿Si aceptamos tarjeta? Sí, claro, aceptamos tarjeta."
+- Depois da sua resposta, pule uma linha e escreva UMA linha começando com ✎, em português, com a frase do aluno corrigida e o motivo em poucas palavras. Se houver mais de um erro, junte tudo nessa mesma linha.
+- Corrija apenas erros reais de gramática e vocabulário. Não corrija pontuação, maiúsculas, nomes próprios nem o que parecer erro de transcrição. Se não houver erro real, não escreva a linha ✎.`;
 }
 function splitFix(t){const i=t.indexOf("✎");return i<0?{reply:t.trim(),fix:""}:{reply:t.slice(0,i).trim(),fix:t.slice(i+1).trim()}}
 function chatTurns(c){
@@ -861,9 +934,9 @@ async function tutorReply(voice=false){
   const ctl=new AbortController();c.ctl=ctl;render();
   try{
     const turns=chatTurns(c);
-    const {text}=await ai(turns,{cache:false,modelTier:"quick",signal:ctl.signal,onText:({text})=>{const el=document.getElementById("pending-bubble");if(el)el.textContent=splitFix(text).reply||"…"}});
+    const {text}=await ai(turns,{cache:false,modelTier:"default",signal:ctl.signal,onText:({text})=>{const el=document.getElementById("pending-bubble");if(el)el.textContent=splitFix(text).reply||"…"}});
     const s=splitFix(text);msg.text=s.reply;msg.fix=s.fix;msg.pending=false;
-    if(!voice&&S.settings.autoSpeak&&S.lang===lang)speak(s.reply,lang);
+    if(!voice&&S.settings.autoSpeak&&S.lang===lang)speak(s.reply,lang,c.g);
     c.busy=false;c.ctl=null;render();
     return s.reply;
   }catch(e){
@@ -877,7 +950,11 @@ async function tutorReply(voice=false){
 async function voiceLoop(){
   const lang=S.lang,c=U.chat[lang];if(!c||U.voice)return;
   try{speechSynthesis.cancel()}catch(e){}
-  U.voice=true;U.micErr="";c.err="";
+  U.voice=true;U.micErr="";c.err="";c.summary=null;c.sumErr="";
+  const last=c.msgs[c.msgs.length-1];
+  if(last&&last.who==="tutor"&&last.text){
+    U.voiceState="speaking";render();await speakAsync(last.text,lang,c.g);await new Promise(r=>setTimeout(r,400));
+  }
   let misses=0;
   while(U.voice&&U.chat[lang]===c&&S.lang===lang){
     U.voiceState="listening";render();
@@ -898,10 +975,74 @@ async function voiceLoop(){
     const reply=await tutorReply(true);
     if(!reply||!U.voice)break;
     U.voiceState="speaking";render();
-    await speakAsync(reply,lang);
+    await speakAsync(reply,lang,c.g);
     await new Promise(r=>setTimeout(r,450));
   }
   U.voice=false;U.voiceState="";render();
+  if(U.chat[lang]===c&&c.msgs.slice(c.evalFrom||0).some(m=>m.who==="me"))summarize(c,lang);
+}
+const DIMS=[["compreensao","Compreensão"],["vocabulario","Vocabulário"],["gramatica","Gramática"],["fluencia","Fluência"],["interacao","Interação"]];
+async function summarize(c,lang){
+  if(c.sumBusy)return;
+  const sc=SCEN.find(s=>s.k===c.scenario),p=S.profiles[lang],lv=p.level;
+  const from=c.evalFrom||0,to=c.msgs.length;
+  const part=c.msgs.slice(from,to).filter(m=>m.text&&!m.pending);
+  if(!part.some(m=>m.who==="me"))return;
+  const conv=part.map(m=>(m.who==="me"?"Aluno: ":"Professor: ")+m.text).join("\n");
+  const prev=p.convs.slice(-5);
+  const hist=prev.length?prev.map(h=>`${h.date} (${h.scen}): nota ${h.nota}, nível ${h.nivel}, `+DIMS.map(([k,n])=>`${n.toLowerCase()} ${h.comp&&h.comp[k]!=null?h.comp[k]:"?"}`).join(", ")+(h.melhorar&&h.melhorar.length?`; a melhorar: ${h.melhorar.join("; ")}`:"")).join("\n"):"Nenhuma: esta é a primeira conversa avaliada.";
+  c.sumBusy=true;c.sumErr="";c.summary=null;render();
+  try{
+    const r=await ai(`Você é professor de ${LANGS[lang].ai}. Avalie o desenvolvimento de um aluno brasileiro de nível ${lv} (QECR) numa conversa no cenário: ${sc.d}. As falas do aluno foram transcritas por reconhecimento de voz e podem ter erros de transcrição.
+Analise SOMENTE as falas do aluno. Não penalize o que parecer erro de transcrição (nomes próprios, palavras soltas sem sentido, frases cortadas).
+
+Conversa:
+${conv.slice(-8000)}
+
+Avaliações anteriores deste aluno (mais antigas primeiro):
+${hist}
+
+Avalie cada competência de 0 a 10, considerando o que se espera do nível ${lv}:
+- compreensao: entendeu as perguntas e respondeu ao que foi perguntado
+- vocabulario: variedade e adequação das palavras ao cenário
+- gramatica: correção das estruturas
+- fluencia: frases completas, sem travar, sem depender de palavras soltas
+- interacao: manteve o diálogo, fez perguntas, pediu esclarecimento quando precisou
+
+Responda apenas com JSON:
+{"geral":"2 a 3 frases em português sobre o desempenho nesta conversa, específicas","nota":0,"nivel_estimado":"A2","competencias":{"compreensao":0,"vocabulario":0,"gramatica":0,"fluencia":0,"interacao":0},"pontos_fortes":["..."],"melhorar":["..."],"evolucao":"1 a 2 frases em português comparando com as avaliações anteriores (o que melhorou, o que continua igual); se for a primeira, diga que esta conversa serve de ponto de partida","correcoes":[{"disse":"fala do aluno","melhor":"forma correta e natural em ${LANGS[lang].ai}","porque":"explicação curta em português"}],"frases_uteis":[{"frase":"expressão útil para esse cenário em ${LANGS[lang].ai}","significado":"em português"}],"dica":"uma dica prática para a próxima conversa, em português"}
+nota de 0 a 100. pontos_fortes e melhorar: 2 a 3 itens curtos cada. Inclua todas as correções relevantes (até 8). frases_uteis: 3 a 5.`,{modelTier:"default",cache:false},true);
+    const comp={};DIMS.forEach(([k])=>{const v=Number(r.competencias&&r.competencias[k]);comp[k]=Number.isFinite(v)?Math.max(0,Math.min(10,Math.round(v))):null});
+    const nivel=LEVELS.includes(r.nivel_estimado)?r.nivel_estimado:lv;
+    const prevAvg={};DIMS.forEach(([k])=>{const vals=prev.map(h=>h.comp&&h.comp[k]).filter(v=>v!=null);prevAvg[k]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null});
+    const nota=Math.max(0,Math.min(100,Math.round(Number(r.nota)||0)));
+    const prevNota=prev.length?Math.round(prev.reduce((a,h)=>a+(h.nota||0),0)/prev.length):null;
+    c.summary={geral:r.geral||"",nota,nivel,comp,prevAvg,prevNota,count:prev.length,
+      fortes:Array.isArray(r.pontos_fortes)?r.pontos_fortes.slice(0,3):[],melhorar:Array.isArray(r.melhorar)?r.melhorar.slice(0,3):[],evolucao:r.evolucao||"",
+      correcoes:Array.isArray(r.correcoes)?r.correcoes.slice(0,8):[],frases:Array.isArray(r.frases_uteis)?r.frases_uteis.slice(0,5):[],dica:r.dica||""};
+    p.convs.push({date:today(),scen:sc.t,nota,nivel,comp,melhorar:c.summary.melhorar});
+    if(p.convs.length>40)p.convs=p.convs.slice(-40);
+    p.xp+=15;bumpStreak(p);save();
+    c.evalFrom=to;
+  }catch(e){c.sumErr=aiMsg(e)}
+  c.sumBusy=false;render();
+}
+function delta(v,prev){if(v==null||prev==null)return"";const d=Math.round((v-prev)*10)/10;if(Math.abs(d)<0.5)return`<span class="delta eq">igual</span>`;return`<span class="delta ${d>0?"up":"down"}">${d>0?"▲ +":"▼ "}${Math.abs(d)>=1?Math.round(d):d}</span>`}
+function summaryHTML(c){
+  if(c.sumBusy)return`<div class="panel" style="margin-top:16px"><div class="loading" style="padding:0">${dots} Avaliando a conversa…</div></div>`;
+  if(c.sumErr)return`<div class="panel" style="margin-top:16px"><p class="err">${esc(c.sumErr)}</p><button class="btn sm" data-act="resum">Tentar de novo</button></div>`;
+  const s=c.summary;if(!s)return"";
+  return`<section class="panel eval" style="margin-top:16px">
+  <div class="eval-head"><div><p class="muted small" style="margin:0">Avaliação da conversa</p><p class="eval-score ${s.nota>=75?"good":s.nota>=50?"mid":"low"}">${s.nota}<small>/100</small></p>${s.prevNota!=null?`<p class="small muted" style="margin:0">Média das últimas conversas: ${s.prevNota}</p>`:""}</div>
+    <div class="eval-lvl"><span class="muted small">Nível nesta conversa</span><b>${esc(s.nivel)}</b><span class="muted small">Seu nível no curso: ${esc(P().level)}</span></div></div>
+  <p>${esc(s.geral)}</p>
+  <div class="dims">${DIMS.map(([k,n])=>{const v=s.comp[k];return`<div class="dim"><div class="dim-top"><span>${n}</span><span><b>${v==null?"–":v}</b>/10 ${delta(v,s.prevAvg[k])}</span></div><div class="dim-bar"><i style="width:${v==null?0:v*10}%"></i></div></div>`}).join("")}</div>
+  ${s.count?`<p class="small muted" style="margin:6px 0 0">Setas comparam com a média das suas ${s.count} ${s.count===1?"conversa anterior":"conversas anteriores"}.</p>`:""}
+  ${s.evolucao?`<h4 class="sum-h">Sua evolução</h4><p style="margin:0">${esc(s.evolucao)}</p>`:""}
+  <div class="two-col">${s.fortes.length?`<div><h4 class="sum-h">Pontos fortes</h4><ul class="plain">${s.fortes.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}${s.melhorar.length?`<div><h4 class="sum-h">Para melhorar</h4><ul class="plain">${s.melhorar.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}</div>
+  ${s.correcoes.length?`<h4 class="sum-h">Correções</h4><ul class="errs">${s.correcoes.map(x=>`<li><s>${esc(x.disse)}</s><br><span class="row" style="gap:6px;flex-wrap:nowrap">${sayBtn(x.melhor)}<b>${esc(x.melhor)}</b></span><span class="muted">${esc(x.porque)}</span></li>`).join("")}</ul>`:""}
+  ${s.frases.length?`<h4 class="sum-h">Frases úteis para esta situação</h4><ul class="vocab">${s.frases.map(f=>`<li>${sayBtn(f.frase)}<div><span class="term">${esc(f.frase)}</span> <span class="muted">${esc(f.significado)}</span></div></li>`).join("")}</ul>`:""}
+  ${s.dica?`<p class="fb"><b>Para a próxima conversa:</b> ${esc(s.dica)}</p>`:""}</section>`;
 }
 function stopVoice(){
   U.voice=false;U.voiceState="";
@@ -917,23 +1058,30 @@ function chatSend(){
 }
 function chatView(){
   const c=U.chat[S.lang];
-  if(!c)return`<p class="muted" style="margin-top:0">Escolha uma situação. O professor fala no seu nível, corrige seus erros em português e você responde digitando ou pelo microfone.</p>
+  const tg=S.settings.teacher==="f"?"f":"m";
+  if(!c)return`<div class="teacher-pick"><p class="small" style="margin:0 0 8px"><b>Com quem você quer conversar?</b></p>
+    <div class="seg" role="group" aria-label="Professor ou professora"><button data-act="teacher" data-v="m" aria-pressed="${tg==="m"}">Professor ${TEACH[S.lang].m}</button><button data-act="teacher" data-v="f" aria-pressed="${tg==="f"}">Professora ${TEACH[S.lang].f}</button></div>
+    <button class="btn ghost sm" data-act="tts" data-g="${tg}" data-t="${esc(S.lang==="es"?`Hola, soy ${TEACH.es[tg]}. ¡Vamos a practicar juntos!`:`Hi, I'm ${TEACH.en[tg]}. Let's practice together!`)}">${ICON_SPK} Ouvir a voz</button></div>
+    <p class="muted" style="margin-top:0">Escolha uma situação. ${tg==="f"?"A professora":"O professor"} fala no seu nível, corrige seus erros e você responde por voz ou digitando.</p>
     <div class="scen">${SCEN.map(s=>`<button data-act="scen" data-v="${s.k}"><strong>${s.t}</strong><span>${s.d.charAt(0).toUpperCase()+s.d.slice(1)}</span></button>`).join("")}</div>`;
   const sc=SCEN.find(s=>s.k===c.scenario);
-  return`<div class="chat"><div class="chat-bar"><strong>${sc.t}</strong><div class="row">
+  const who=(c.g==="f"?"a professora ":"o professor ")+TEACH[S.lang][c.g==="f"?"f":"m"];
+  return`<div class="chat"><div class="chat-bar"><strong>${sc.t} <span class="muted small" style="font-family:var(--body);font-weight:400">com ${who}</span></strong><div class="row">
     <label class="toggle"><input type="checkbox" data-act="autospeak" ${S.settings.autoSpeak?"checked":""}> Ler respostas em voz alta</label>
     <button class="btn ghost sm" data-act="chatreset">Trocar situação</button>
+    ${!U.voice&&!c.busy&&!c.sumBusy&&c.msgs.slice(c.evalFrom||0).some(m=>m.who==="me")?`<button class="btn ghost sm" data-act="resum">Encerrar e avaliar</button>`:""}
     ${U.voice||micBlocked?"":`<button class="btn primary sm" data-act="voicestart" ${c.busy?"disabled":""}>${ICON_MIC} Conversar por voz</button>`}</div></div>
-    <div class="chat-log" id="chat-log" aria-live="polite">${c.msgs.map((m,i)=>m.who==="me"?`<div class="msg me"><div class="bubble">${esc(m.text)}</div></div>`:
+    ${U.voice&&!U.showText?`<div class="voice-stage ${U.voiceState}"><div class="orb"></div><p class="vs-title">${U.voiceState==="listening"?"Pode falar":U.voiceState==="thinking"?"Pensando…":"Ouça "+who}</p><p class="muted small">${U.voiceState==="listening"?"Fale com calma. Quando terminar, faça uma pausa ou toque em Terminei de falar.":"A conversa está só no áudio. As correções aparecem no resumo quando você parar."}</p><button class="linkish" data-act="showtext">Mostrar texto da conversa</button></div>`:`<div class="chat-log" id="chat-log" aria-live="polite">${U.voice?`<p style="margin:0"><button class="linkish" data-act="showtext">Esconder texto</button></p>`:""}${c.msgs.map((m,i)=>m.who==="me"?`<div class="msg me"><div class="bubble">${esc(m.text)}</div></div>`:
       `<div class="msg tutor"><div class="bubble" ${m.pending?'id="pending-bubble"':""}>${m.pending?(esc(m.text)||"…"):esc(m.text)}</div>
       ${m.fix?`<div class="fix">✎ ${esc(m.fix)}</div>`:""}${m.pt?`<div class="pt">${esc(m.pt)}</div>`:""}
-      ${m.pending?"":`<div class="msg-tools"><button data-act="tts" data-t="${esc(m.text)}">Ouvir</button><button data-act="chatpt" data-i="${i}">${m.ptBusy?"Traduzindo…":"Ver em português"}</button></div>`}</div>`).join("")}
-      ${c.err?`<p class="err">${esc(c.err)}</p>`:""}</div>
-    ${U.voice?`<div class="voice-bar ${U.voiceState}"><span class="pulse"></span><span class="vb-main"><span>${U.voiceState==="listening"?"Ouvindo… fale com calma em "+L().name.toLowerCase():U.voiceState==="thinking"?"Pensando na resposta…":"Professor falando…"}</span>${U.voiceState==="listening"?`<span class="live" id="live-text"></span>`:""}</span>${U.voiceState==="listening"?`<button class="btn primary sm" data-act="voicedone">Terminei de falar</button>`:""}<button class="btn sm" data-act="voicestop">Parar</button></div>`:""}
+      ${m.pending?"":`<div class="msg-tools"><button data-act="tts" data-t="${esc(m.text)}" data-g="${c.g||""}">Ouvir</button><button data-act="chatpt" data-i="${i}">${m.ptBusy?"Traduzindo…":"Ver em português"}</button></div>`}</div>`).join("")}
+      ${c.err?`<p class="err">${esc(c.err)}</p>`:""}</div>`}
+    ${U.voice?`<div class="voice-bar ${U.voiceState}"><span class="pulse"></span><span class="vb-main"><span>${U.voiceState==="listening"?"Ouvindo… fale com calma em "+L().name.toLowerCase():U.voiceState==="thinking"?"Pensando na resposta…":TEACH[S.lang][c.g==="f"?"f":"m"]+" falando…"}</span>${U.voiceState==="listening"&&U.showText?`<span class="live" id="live-text"></span>`:""}</span>${U.voiceState==="listening"?`<button class="btn primary sm" data-act="voicedone">Terminei de falar</button>`:""}<button class="btn sm" data-act="voicestop">Parar</button></div>`:""}
     <div class="composer"><button class="btn mic ${U.listening?"rec":""}" data-act="chatmic" aria-label="${U.listening?"Terminei de falar":"Falar pelo microfone"}" title="${U.listening?"Toque para enviar":"Falar"}" ${c.busy?"disabled":""}>${ICON_MIC}</button>
       <textarea id="chat-in" data-k="chatInput" placeholder="${U.listening?"Ouvindo…":"Escreva em "+L().name.toLowerCase()+"…"}" aria-label="Mensagem">${esc(U.chatInput)}</textarea>
       ${c.busy?`<button class="btn" data-act="chatstop">Parar</button>`:`<button class="btn primary" data-act="chatsend">Enviar</button>`}</div></div>
     ${U.micErr?`<p class="err">${esc(U.micErr)}</p>`:""}
+    ${U.voice?"":summaryHTML(c)}
     ${micBlocked?`<p class="tip">${inClaude?"Dentro do claude.ai o microfone fica bloqueado, então a conversa só por voz funciona na versão independente deste app (no seu próprio endereço). Aqui, use o ditado: ":"Para falar: "}${dictHint()} e fale em ${L().name.toLowerCase()}. O texto aparece na caixa; depois toque em Enviar.</p>`:""}`;
 }
 async function chatPt(i){
@@ -984,7 +1132,9 @@ const ACT={
   cancelgen(){if(U.lesson&&U.lesson.ctl)U.lesson.ctl.abort()},
   regen(){generateLesson()},
   toggletr(){U.lesson.showTr=!U.lesson.showTr;render()},
-  tts(d){speak(d.t)},
+  tts(d){speak(d.t,S.lang,d.g||null)},
+  vtest(d){speak(d.l==="es"?`Hola, soy ${TEACH.es[d.g]}, tu ${d.g==="f"?"profesora":"profesor"} de español.`:`Hi, I'm ${TEACH.en[d.g]}, your English teacher.`,d.l,d.g)},
+  teacher(d){S.settings.teacher=d.v;save();render()},
   stoptts(){try{speechSynthesis.cancel()}catch(e){}},
   sr(d){if(U.speak[d.id]&&U.speak[d.id].listening){activeListen&&activeListen.finishNow();return}if(activeListen)return;doSR(d.id,d.t)},
   mc(d){U.lesson.mc[+d.i]=+d.o;render()},
@@ -993,11 +1143,13 @@ const ACT={
   trcheck(d){trCheck(+d.i)},
   lwrite(){lWrite()},
   complete(){completeLesson()},
-  scen(d){U.chat[S.lang]={scenario:d.v,msgs:[],busy:false,err:""};U.micErr="";tutorReply()},
+  scen(d){U.chat[S.lang]={scenario:d.v,g:S.settings.teacher==="f"?"f":"m",msgs:[],busy:false,err:""};U.micErr="";tutorReply()},
   chatreset(){stopVoice();const c=U.chat[S.lang];if(c&&c.ctl)c.ctl.abort();U.chat[S.lang]=null;render()},
   voicestart(){voiceLoop()},
   voicestop(){stopVoice()},
   voicedone(){activeListen&&activeListen.finishNow()},
+  showtext(){U.showText=!U.showText;render()},
+  resum(){const c=U.chat[S.lang];if(c)summarize(c,S.lang)},
   settings(){U.view="settings";U.keyStatus="";U.keyInput=undefined;render();window.scrollTo(0,0)},
   async savekey(){
     const k=(U.keyInput??getKey()).trim();if(!k){U.keyStatus="Cole sua chave antes de salvar.";render();return}
@@ -1030,6 +1182,7 @@ const CHG={
   setlevel(el){const p=P();if(p.level===el.value)return;p.level=el.value;p.history.push({date:today(),level:el.value,manual:true});save();U.browse=null;render()},
   rate(el){S.settings.rate=+el.value;save();render()},
   pause(el){S.settings.pause=+el.value;save();render()},
+  voicesel(el){S.settings.voices=S.settings.voices||{};if(el.value)S.settings.voices[el.dataset.v]=el.value;else delete S.settings.voices[el.dataset.v];save()},
   autospeak(el){S.settings.autoSpeak=el.checked;save()}
 };
 document.addEventListener("click",e=>{
