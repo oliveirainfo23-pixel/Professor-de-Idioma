@@ -452,9 +452,13 @@ function loadVoices(){try{voices=speechSynthesis.getVoices()}catch(e){}}
 if("speechSynthesis" in window){loadVoices();speechSynthesis.onvoiceschanged=()=>{loadVoices();if(U.view==="settings")render()}}
 const TEACH={es:{m:"Carlos",f:"Lucía"},en:{m:"James",f:"Emily"}};
 const tName=(g=S.settings.teacher,lang=S.lang)=>TEACH[lang][g==="f"?"f":"m"];
-const MALE_RE=/\b(male|homme|hombre|man|pablo|alvaro|álvaro|jorge|juan|diego|carlos|enrique|raul|raúl|guy|david|mark|james|george|daniel|alex|fred|tom|aaron|arthur|ryan|eric|christopher|roger|davis|tony|jason|brian|andrew|steffan|jacob|liam|gonzalo|dario|darío|jaime|tomas|tomás|thomas|oliver|reed|rocko|eddy|grandpa)\b/i;
-const FEMALE_RE=/\b(female|femme|mujer|woman|helena|laura|elvira|monica|mónica|paulina|marisol|lucia|lucía|sabina|dalia|jenny|aria|zira|hazel|susan|samantha|karen|moira|tessa|victoria|allison|ava|emma|libby|sonia|michelle|ana|elena|ximena|isabella|catalina|abril|nora|serena|joanna|salli|kendra|kimberly|ivy|conchita|lupe|penelope|amy|fiona|kate|zoe|flo|shelley|sandy|grandma|irene|esperanza|angelica|sara|elsa)\b|google español|google us english/i;
-function voiceGender(v){const n=v.name||"";if(MALE_RE.test(n))return"m";if(FEMALE_RE.test(n))return"f";return null}
+const MALE_NAMES="male|homme|hombre|man|pablo|alvaro|jorge|juan|diego|carlos|enrique|raul|guy|david|mark|james|george|daniel|alex|fred|tom|aaron|arthur|ryan|eric|christopher|roger|davis|tony|jason|brian|andrew|steffan|jacob|liam|gonzalo|dario|jaime|tomas|thomas|oliver|reed|rocko|eddy|grandpa|arnau|elias|nil|saul|teo|gerardo|cecilio|liberto|luciano|pelayo|yago|rodrigo|mateo|emilio|andres|federico|lorenzo|marcelo|mario|nelson|sebastian|valentin|ricardo|pedro|alonso|jose|luis|miguel|antonio|javier|manuel|francisco|sergio|alberto|fernando|hugo|ivan|jorge|kevin|leo|lucas|martin|nicolas|oscar|pau|roberto|victor|william|benjamin|christopher|connor|davis|derek|dustin|jake|jasper|john|josh|matthew|michael|noah|paul|richard|sam|stefan|steve|wayne|bruce|ralph|junior|albert|ken|rishi|prabhat|neerja_m";
+const FEMALE_NAMES="female|femme|mujer|woman|helena|laura|elvira|monica|paulina|marisol|lucia|sabina|dalia|jenny|aria|zira|hazel|susan|samantha|karen|moira|tessa|victoria|allison|ava|emma|libby|sonia|michelle|ana|elena|ximena|isabella|catalina|abril|nora|serena|joanna|salli|kendra|kimberly|ivy|conchita|lupe|penelope|amy|fiona|kate|zoe|flo|shelley|sandy|grandma|irene|esperanza|angelica|sara|elsa|paloma|triana|lia|laia|vera|estrella|larissa|renata|camila|belkys|karla|maria|martina|margarita|sofia|valentina|yolanda|andrea|paola|salome|ramona|teresa|tania|lorena|nuria|candela|beatriz|marta|carmen|julia|isabel|veronica|alba|ines|clara|rosa|luisa|natalia|silvia|patricia|claudia|gabriela|daniela|mariana|sabrina|elizabeth|jane|ashley|cora|jessica|monica|nancy|sara|ana|aria|emily|olivia|sonia|natasha|clara|leah|molly|heather|amber|ellie|sally|maisie|bella|abbie|hollie|olivia|ruby|holly|eloise|marie|anna|tracy|yuna|xiaoxiao";
+const norm0=s=>String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+const MALE_RE=new RegExp("\\b("+MALE_NAMES+")\\b");
+const FEMALE_RE=new RegExp("\\b("+FEMALE_NAMES+")\\b|google espanol|google us english|google uk english female");
+
+function voiceGender(v){const n=norm0(v.name||"");if(/\bfemale\b/.test(n))return"f";if(FEMALE_RE.test(n)&&!/\bmale\b/.test(n))return"f";if(MALE_RE.test(n))return"m";if(FEMALE_RE.test(n))return"f";return null}
 function langVoices(lang){const pre=lang.toLowerCase();return voices.filter(v=>(v.lang||"").toLowerCase().replace("_","-").startsWith(pre))}
 function pickVoice(lang,g){
   const list=langVoices(lang);if(!list.length)return null;
@@ -464,15 +468,21 @@ function pickVoice(lang,g){
   const pool=g?list.filter(v=>voiceGender(v)===g):list;
   return(pool.length?pool:list).slice().sort((a,b)=>score(b)-score(a))[0];
 }
-function speakAsync(text,lang=S.lang,g=null){
+function waitVoices(){
+  if(voices.length)return Promise.resolve();
+  loadVoices();if(voices.length)return Promise.resolve();
+  return new Promise(r=>{let n=0;const t=setInterval(()=>{loadVoices();if(voices.length||++n>15){clearInterval(t);r()}},100)});
+}
+async function speakAsync(text,lang=S.lang,g=null){
+  if(!("speechSynthesis" in window)||!text)return;
+  await waitVoices();
   return new Promise(res=>{
-    if(!("speechSynthesis" in window)||!text)return res();
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     const pref=LANGS[lang].bcp;u.lang=pref;u.rate=S.settings.rate||0.95;
     const v=pickVoice(lang,g);
     if(v)u.voice=v;
-    if(g&&(!v||voiceGender(v)!==g))u.pitch=g==="m"?0.8:1.15;
+    if(g&&(!v||voiceGender(v)!==g))u.pitch=g==="m"?0.75:1.35;
     u.onend=()=>res();u.onerror=()=>res();
     speechSynthesis.speak(u);
   });
@@ -607,10 +617,12 @@ function settingsView(){
     ${st==="testing"?`<p class="loading" style="padding:10px 0 0">${dots} Testando a conexão…</p>`:st==="ok"?`<p class="fb good">Conexão funcionando. Os recursos com IA estão liberados.</p>`:st?`<p class="err">${esc(st)}</p>`:""}
     ${k?`<p style="margin-top:12px"><button class="linkish" data-act="delkey">Remover chave deste aparelho</button></p>`:""}</section>
   <section class="panel"><h3>Vozes</h3><p class="muted small">O app escolhe automaticamente uma voz masculina para o professor e uma feminina para a professora. Se a voz não combinar, escolha outra aqui. As opções dependem do navegador; o Edge costuma ter as vozes mais naturais.</p>
-    ${["es","en"].map(lang=>["m","f"].map(g=>{const list=langVoices(lang);const cur=(S.settings.voices||{})[lang+"-"+g]||"";return`<div class="voice-row"><label class="small" for="v-${lang}-${g}">${g==="m"?"Professor":"Professora"} ${TEACH[lang][g]} (${LANGS[lang].name.toLowerCase()})</label>
-      <div class="inline-form"><select id="v-${lang}-${g}" data-act="voicesel" data-v="${lang}-${g}"><option value="">Automática</option>${list.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===cur?"selected":""}>${esc(v.name)}</option>`).join("")}</select>
+    ${["es","en"].map(lang=>["m","f"].map(g=>{const list=langVoices(lang);const cur=(S.settings.voices||{})[lang+"-"+g]||"";return`<div class="voice-row"><label class="small" for="v-${lang}-${g}">${g==="m"?"Professor":"Professora"} ${TEACH[lang][g]} (${LANGS[lang].name.toLowerCase()})${(()=>{const v=pickVoice(lang,g);return v?` <span class="muted">usando: ${esc(v.name)}${voiceGender(v)===g?"":" (tom ajustado)"}</span>`:""})()}</label>
+      <div class="inline-form"><select id="v-${lang}-${g}" data-act="voicesel" data-v="${lang}-${g}"><option value="">Automática</option>${list.slice().sort((a,b)=>(voiceGender(b)===g)-(voiceGender(a)===g)).map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===cur?"selected":""}>${esc(v.name)}${voiceGender(v)==="f"?" · feminina":voiceGender(v)==="m"?" · masculina":""}</option>`).join("")}</select>
       <button class="btn ghost sm" data-act="vtest" data-l="${lang}" data-g="${g}">${ICON_SPK} Testar</button></div></div>`}).join("")).join("")}
-    ${voices.length?"":`<p class="muted small">Nenhuma voz carregada ainda. Recarregue a página se a lista continuar vazia.</p>`}</section>
+    ${voices.length?"":`<p class="muted small">Nenhuma voz carregada ainda. Recarregue a página se a lista continuar vazia.</p>`}
+    ${voices.length&&!langVoices("es").some(v=>voiceGender(v)==="f")?`<p class="fb mid">Este navegador não tem nenhuma voz feminina em espanhol, então a professora Lucía usa uma voz masculina com tom mais agudo. Para ter uma voz feminina de verdade, abra o app no Microsoft Edge, ou no Windows vá em Configurações > Hora e idioma > Fala > Adicionar vozes e instale Espanhol (Espanha) ou Espanhol (México).</p>`:""}
+    ${voices.length&&!langVoices("en").some(v=>voiceGender(v)==="f")?`<p class="fb mid">Este navegador não tem voz feminina em inglês instalada. Adicione uma em Configurações > Hora e idioma > Fala do Windows, ou use o Edge.</p>`:""}</section>
   <section class="panel"><h3>Microfone</h3><p class="muted small">Na primeira vez que você tocar em Falar ou em Conversar por voz, o navegador pede permissão. Use Chrome ou Edge no computador; no iPad, o Safari com o Ditado ativado em Ajustes > Geral > Teclado.</p>
     <label class="small" for="pause2" style="display:block;margin-top:14px">Tempo de pausa antes de considerar que você terminou de falar: ${(S.settings.pause||2.5).toFixed(1)} s</label>
     <input id="pause2" type="range" min="1.5" max="6" step="0.5" value="${S.settings.pause||2.5}" data-act="pause" style="width:100%;max-width:320px;display:block;margin:8px 0">
@@ -1182,7 +1194,7 @@ const CHG={
   setlevel(el){const p=P();if(p.level===el.value)return;p.level=el.value;p.history.push({date:today(),level:el.value,manual:true});save();U.browse=null;render()},
   rate(el){S.settings.rate=+el.value;save();render()},
   pause(el){S.settings.pause=+el.value;save();render()},
-  voicesel(el){S.settings.voices=S.settings.voices||{};if(el.value)S.settings.voices[el.dataset.v]=el.value;else delete S.settings.voices[el.dataset.v];save()},
+  voicesel(el){S.settings.voices=S.settings.voices||{};if(el.value)S.settings.voices[el.dataset.v]=el.value;else delete S.settings.voices[el.dataset.v];save();render()},
   autospeak(el){S.settings.autoSpeak=el.checked;save()}
 };
 document.addEventListener("click",e=>{
